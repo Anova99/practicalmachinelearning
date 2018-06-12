@@ -1,0 +1,102 @@
+---
+title: "Pracical ML Project"
+author: "Rafael Lavagna"
+date: "12 de junio de 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set
+
+## Reading and cleaning the data
+
+We can see that the data contains two different types of NAs, which we deifne in the "na.strings"" argument.
+It is also noticeable that some features contain a lot of missing values. Therefore, we are going to keep only with the predictors that have less than 90% of missing values.
+
+```{r}
+setwd("C:/Users/Julio/Coursera/ML/practicalmachinelearning/practicalmachinelearning")
+datos <- read.csv("pml-training.csv", header = TRUE, na.strings = c("NA",""))
+validation <- read.csv("pml-testing.csv", header = TRUE, na.strings = c("NA",""))
+
+datos1 <- datos[,colMeans(is.na(datos))< 0.9]
+validation <- validation[,colMeans(is.na(datos))< 0.9]
+```
+
+Taking a closer look to the remaining features we observe that some of them are irrelevant, as it is the case for the index, the timestamp and the windows. We then discard them, keeping only the features obtained by the accelerometers and the user names, as this could have an effect on the response.
+
+```{r}
+datos1 <- datos1[,-c(1,3:7)]
+
+validation <- validation[,-c(1,3:7)]
+validation <- validation[,-54]
+```
+
+## Data partitioning
+
+We split the data in two different sets. 70% for building the model and 30% for testing it.
+
+```{r warning=FALSE,message=FALSE}
+library(caret)
+
+set.seed(1899)
+inTrain <- createDataPartition(y=datos1$classe, p=0.7, list=FALSE)
+
+training <- datos1[inTrain,]
+testing <- datos1[-inTrain,]
+```
+
+## ML Models
+
+We are going to build two different models (Boosting and Random Forest) and compare their in-sample error. For this model-building step we are going to use the cross validation method with 5 folds. Afterwards we are going to calculate the accuracy of each of the models over the testing set and keep with the one with the higher performance.
+
+```{r warning=FALSE,message=FALSE}
+library(parallel)
+library(doParallel)
+
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
+fitControl <- trainControl(method = "cv", number = 5, allowParallel = TRUE)
+
+modelFit <- train(classe ~ .,method="gbm",data=training, trControl = fitControl ,verbose=FALSE)
+
+modelFit2 <- train(classe ~ .,method="rf",data=training,trControl = fitControl, verbose=FALSE)
+
+confusionMatrix(training$classe,predict(modelFit,training))
+confusionMatrix(training$classe,predict(modelFit2,training))
+```
+
+We observe that the in-sample error is higher for the gbm method than for the rf one (0.026 against 0).
+
+```{r}
+confusionMatrix(testing$classe,predict(modelFit,testing))
+confusionMatrix(testing$classe,predict(modelFit2,testing))
+```
+
+As regards the accuracy over the testing set, which is the same as considering the estimation of the out of sample error, we oberve that again the rf model, with an accuracy of 0.9937, performs better than the gbm one whose accuracy is of 0.9623 (OOS errors of 0.0063 against 0.0377).
+
+## Conclusions
+
+The random forest model performs quite good on this data, accounting for an estimation of the out of sample error of 0.0063.
+
+## Validation estimations
+
+The classe predictions for the validation set are the following
+
+```{r}
+predict(modelFit2,newdata=validation)
+```
+
+## Refrences 
+
+[The data for this project come from this source:][1]
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+[1]: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.
